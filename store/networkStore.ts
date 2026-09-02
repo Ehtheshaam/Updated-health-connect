@@ -43,11 +43,15 @@ export const useNetworkStore = create<NetworkStore>((set) => ({
   }
 }));
 
-// Set up network state listener
-NetInfo.addEventListener((state) => {
-  useNetworkStore.getState().setNetworkState({
-    isOnline: state.isConnected ?? false,
-    networkType: state.type,
-    isInternetReachable: state.isInternetReachable
+// Set up network state listener (wrapped in try-catch for Expo Go compatibility)
+try {
+  NetInfo.addEventListener((state) => {
+    useNetworkStore.getState().setNetworkState({
+      isOnline: state.isConnected ?? false,
+      networkType: state.type,
+      isInternetReachable: state.isInternetReachable,
+    });
   });
-});
+} catch (e) {
+  console.warn('NetInfo listener setup failed:', e);
+}

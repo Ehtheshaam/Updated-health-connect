@@ -1,69 +1,59 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import React, { useState, useEffect, useCallback } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Modal } from 'react-native';
 import { useTranslation } from 'react-i18next';
 // import { FileText, Download, Eye, Calendar, User, Shield, FolderSync as Sync } from 'lucide-react-native';
 import { useHealthStore } from '@/store/healthStore';
 import { useNetworkStore } from '@/store/networkStore';
+import api from '@/src/services/api';
 
 export default function RecordsScreen() {
   const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState('records');
-  const { healthRecords, prescriptions, symptomHistory } = useHealthStore();
+  const { healthRecords, prescriptions, symptomHistory, setHealthRecords, setPrescriptions } = useHealthStore();
   const { isOnline } = useNetworkStore();
+  const [isLoadingRecords, setIsLoadingRecords] = useState(false);
+  const [modalVisible, setModalVisible] = useState(false);
+  const [selectedItem, setSelectedItem] = useState<{ type: 'record' | 'prescription', data: any } | null>(null);
 
-  const mockHealthRecords = [
-    {
-      id: 1,
-      type: t('records.recordTypes.bloodTest'),
-      date: '2024-01-10',
-      doctor: 'Dr. Priya Sharma',
-      results: t('records.results'),
-      synced: true,
-      file: 'blood_test_report.pdf'
-    },
-    {
-      id: 2,
-      type: t('records.recordTypes.xrayChest'),
-      date: '2024-01-05',
-      doctor: 'Dr. Rajesh Kumar',
-      results: 'Clear',
-      synced: true,
-      file: 'xray_chest.pdf'
-    },
-    {
-      id: 3,
-      type: t('records.recordTypes.generalCheckup'),
-      date: '2024-01-01',
-      doctor: 'Dr. Anita Gupta',
-      results: 'Healthy',
-      synced: false,
-      file: null
+  const fetchRecords = useCallback(async () => {
+    setIsLoadingRecords(true);
+    try {
+      const [recordsRes, prescriptionsRes] = await Promise.all([
+        api.get('/records'),
+        api.get('/prescriptions'),
+      ]);
+      setHealthRecords(
+        recordsRes.data.map((r: any) => ({
+          id: r.id,
+          type: r.type,
+          date: r.date,
+          doctor: r.doctor,
+          results: r.results,
+          synced: true,
+          file: r.fileUrl || null,
+        }))
+      );
+      setPrescriptions(
+        prescriptionsRes.data.map((p: any) => ({
+          id: p.id,
+          doctor: p.doctor,
+          date: p.date,
+          medicines: typeof p.medicines === 'string' ? JSON.parse(p.medicines) : p.medicines,
+          instructions: p.instructions,
+          instructionsHindi: '',
+          synced: true,
+        }))
+      );
+    } catch {
+      // Keep whatever is already in the store
+    } finally {
+      setIsLoadingRecords(false);
     }
-  ];
+  }, [setHealthRecords, setPrescriptions]);
 
-  const mockPrescriptions = [
-    {
-      id: 1,
-      doctor: 'Dr. Priya Sharma',
-      date: '2024-01-12',
-      medicines: [
-        { name: 'Paracetamol 500mg', dosage: '1 tablet twice daily', duration: '3 days' },
-        { name: 'Amoxicillin 250mg', dosage: '1 capsule thrice daily', duration: '5 days' }
-      ],
-      instructions: 'Take medicine after food. Complete the course.',
-      synced: true
-    },
-    {
-      id: 2,
-      doctor: 'Dr. Rajesh Kumar',
-      date: '2024-01-08',
-      medicines: [
-        { name: 'Cough Syrup', dosage: '10ml twice daily', duration: '5 days' }
-      ],
-      instructions: 'Shake well before use.',
-      synced: true
-    }
-  ];
+  useEffect(() => {
+    fetchRecords();
+  }, [fetchRecords]);
 
   const renderHealthRecords = () => (
     <ScrollView style={styles.tabContent}>
@@ -77,7 +67,7 @@ export default function RecordsScreen() {
           )}
         </View>
         
-        {mockHealthRecords.map((record) => (
+        {healthRecords.map((record) => (
           <View key={record.id} style={styles.recordCard}>
             <View style={styles.recordHeader}>
               {/* <FileText size={24} color="#3B82F6" /> */}
@@ -102,28 +92,43 @@ export default function RecordsScreen() {
             
             <View style={styles.recordDetails}>
               <View style={styles.recordMeta}>
-                {/* <Calendar size={16} color="#6B7280" /> */}
                 <Text style={styles.recordDate}>
                   {new Date(record.date).toLocaleDateString()}
                 </Text>
               </View>
-              <Text style={styles.recordResults}>{t('records.results')}: {record.results}</Text>
             </View>
             
             <View style={styles.recordActions}>
-              <TouchableOpacity style={styles.actionButton}>
-                {/* <Eye size={16} color="#3B82F6" /> */}
+              <TouchableOpacity 
+                style={styles.actionButton} 
+                onPress={() => {
+                  setSelectedItem({ type: 'record', data: record });
+                  setModalVisible(true);
+                }}
+              >
                 <Text style={styles.actionButtonText}>{t('records.view')}</Text>
               </TouchableOpacity>
               {record.file && (
                 <TouchableOpacity style={styles.actionButton}>
-                  {/* <Download size={16} color="#22C55E" /> */}
                   <Text style={styles.actionButtonText}>{t('records.download')}</Text>
                 </TouchableOpacity>
               )}
             </View>
           </View>
         ))}
+
+        {healthRecords.length === 0 && !isLoadingRecords && (
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyStateText}>No health records yet</Text>
+            <Text style={styles.emptyStateSubtext}>Records will appear here once added.</Text>
+          </View>
+        )}
+
+        {isLoadingRecords && (
+          <View style={styles.emptyState}>
+            <ActivityIndicator size="small" color="#22C55E" />
+          </View>
+        )}
       </View>
     </ScrollView>
   );
@@ -133,45 +138,44 @@ export default function RecordsScreen() {
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>{t('records.prescriptions')}</Text>
         
-        {mockPrescriptions.map((prescription) => (
-          <View key={prescription.id} style={styles.prescriptionCard}>
-            <View style={styles.prescriptionHeader}>
-              {/* <User size={20} color="#8B5CF6" /> */}
-              <View style={styles.prescriptionInfo}>
-                <Text style={styles.prescriptionDoctor}>{prescription.doctor}</Text>
-                <Text style={styles.prescriptionDate}>
-                  {new Date(prescription.date).toLocaleDateString()}
-                </Text>
-              </View>
-              <View style={styles.syncedBadge}>
-                {/* <Sync size={12} color="#22C55E" /> */}
-                <Text style={styles.syncedText}>{t('common.synced')}</Text>
-              </View>
-            </View>
-            
-            <View style={styles.medicinesContainer}>
-              <Text style={styles.medicinesTitle}>{t('records.medicines')}:</Text>
-              {prescription.medicines.map((medicine, index) => (
-                <View key={index} style={styles.medicineItem}>
-                  <Text style={styles.medicineName}>{medicine.name}</Text>
-                  <Text style={styles.medicineDosage}>
-                    {medicine.dosage} for {medicine.duration}
+        {prescriptions.length > 0 ? (
+          prescriptions.map((prescription) => (
+            <View key={prescription.id} style={styles.prescriptionCard}>
+              <View style={styles.prescriptionHeader}>
+                {/* <User size={20} color="#8B5CF6" /> */}
+                <View style={styles.prescriptionInfo}>
+                  <Text style={styles.prescriptionDoctor}>{prescription.doctor}</Text>
+                  <Text style={styles.prescriptionDate}>
+                    {new Date(prescription.date).toLocaleDateString()}
                   </Text>
                 </View>
-              ))}
+                <View style={styles.syncedBadge}>
+                  {/* <Sync size={12} color="#22C55E" /> */}
+                  <Text style={styles.syncedText}>{t('common.synced')}</Text>
+                </View>
+              </View>
+              <View style={styles.recordActions}>
+                <TouchableOpacity 
+                  style={styles.actionButton} 
+                  onPress={() => {
+                    setSelectedItem({ type: 'prescription', data: prescription });
+                    setModalVisible(true);
+                  }}
+                >
+                  <Text style={styles.actionButtonText}>{t('records.view')}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.actionButton}>
+                  <Text style={styles.actionButtonText}>{t('records.downloadPDF')}</Text>
+                </TouchableOpacity>
+              </View>
             </View>
-            
-            <View style={styles.instructionsContainer}>
-              <Text style={styles.instructionsTitle}>{t('records.instructions')}:</Text>
-              <Text style={styles.instructions}>{prescription.instructions}</Text>
-            </View>
-            
-            <TouchableOpacity style={styles.downloadButton}>
-              {/* <Download size={16} color="#FFFFFF" /> */}
-              <Text style={styles.downloadButtonText}>{t('records.downloadPDF')}</Text>
-            </TouchableOpacity>
+          ))
+        ) : (
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyStateText}>No prescriptions yet</Text>
+            <Text style={styles.emptyStateSubtext}>Prescriptions will appear here once added.</Text>
           </View>
-        ))}
+        )}
       </View>
     </ScrollView>
   );
@@ -292,6 +296,63 @@ export default function RecordsScreen() {
       {activeTab === 'records' && renderHealthRecords()}
       {activeTab === 'prescriptions' && renderPrescriptions()}
       {activeTab === 'symptoms' && renderSymptomHistory()}
+
+      <Modal
+        visible={modalVisible}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>
+                {selectedItem?.type === 'record' ? 'Health Record' : 'Prescription Details'}
+              </Text>
+              <TouchableOpacity onPress={() => setModalVisible(false)}>
+                <Text style={styles.closeButton}>Close</Text>
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={styles.modalBody}>
+              {selectedItem?.type === 'record' && (
+                <>
+                  <Text style={styles.modalLabel}>Type</Text>
+                  <Text style={styles.modalValue}>{selectedItem.data.type}</Text>
+                  <Text style={styles.modalLabel}>Doctor</Text>
+                  <Text style={styles.modalValue}>{selectedItem.data.doctor}</Text>
+                  <Text style={styles.modalLabel}>Date</Text>
+                  <Text style={styles.modalValue}>{new Date(selectedItem.data.date).toLocaleDateString()}</Text>
+                  <Text style={styles.modalLabel}>Results</Text>
+                  <Text style={styles.modalValue}>{selectedItem.data.results}</Text>
+                </>
+              )}
+              {selectedItem?.type === 'prescription' && (
+                <>
+                  <Text style={styles.modalLabel}>Doctor</Text>
+                  <Text style={styles.modalValue}>{selectedItem.data.doctor}</Text>
+                  <Text style={styles.modalLabel}>Date</Text>
+                  <Text style={styles.modalValue}>{new Date(selectedItem.data.date).toLocaleDateString()}</Text>
+                  <View style={styles.medicinesContainer}>
+                    <Text style={styles.medicinesTitle}>{t('records.medicines')}:</Text>
+                    {selectedItem.data.medicines?.map((medicine: any, index: number) => (
+                      <View key={index} style={styles.medicineItem}>
+                        <Text style={styles.medicineName}>{medicine.name}</Text>
+                        <Text style={styles.medicineDosage}>
+                          {medicine.dosage} for {medicine.duration}
+                        </Text>
+                      </View>
+                    ))}
+                  </View>
+                  <View style={styles.instructionsContainer}>
+                    <Text style={styles.instructionsTitle}>{t('records.instructions')}:</Text>
+                    <Text style={styles.instructions}>{selectedItem.data.instructions}</Text>
+                  </View>
+                </>
+              )}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -624,5 +685,56 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#9CA3AF',
     textAlign: 'center',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContent: {
+    backgroundColor: '#FFFFFF',
+    width: '90%',
+    maxHeight: '80%',
+    borderRadius: 16,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 10,
+    elevation: 8,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#1F2937',
+  },
+  closeButton: {
+    fontSize: 16,
+    color: '#3B82F6',
+    fontWeight: '600',
+  },
+  modalBody: {
+    padding: 20,
+  },
+  modalLabel: {
+    fontSize: 14,
+    color: '#6B7280',
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  modalValue: {
+    fontSize: 16,
+    color: '#1F2937',
+    marginBottom: 16,
+    lineHeight: 22,
   },
 });

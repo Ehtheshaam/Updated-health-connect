@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import api from '@/src/services/api';
 import {
   ActivityIndicator,
   View, Text, StyleSheet, ScrollView, TextInput,
@@ -112,8 +113,27 @@ export default function SymptomsScreen() {
   const [severity, setSeverity] = useState<SeverityLevel>('mild');
   const [result, setResult] = useState<any>(null);
   const [isChecking, setIsChecking] = useState(false);
+  const [isListening, setIsListening] = useState(false);
   const loadingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const { addSymptomRecord, symptomHistory, setLatestSymptomReport } = useHealthStore();
+  const { addSymptomRecord, symptomHistory, setLatestSymptomReport, setSymptomHistory } = useHealthStore();
+
+  const handleSimulateSpeech = () => {
+    if (isListening) return;
+    setIsListening(true);
+    
+    const sampleSymptoms = [
+      "I have a mild headache and a slight fever.",
+      "My stomach hurts and I feel nauseous since morning.",
+      "I've had a dry cough and sore throat for two days.",
+      "I'm feeling very dizzy and weak today."
+    ];
+    
+    setTimeout(() => {
+      const randomSymptom = sampleSymptoms[Math.floor(Math.random() * sampleSymptoms.length)];
+      setSymptoms((prev) => prev ? prev + " " + randomSymptom : randomSymptom);
+      setIsListening(false);
+    }, 2500);
+  };
 
   const severityOptions: Array<{ value: SeverityLevel; label: string; color: string }> = [
     { value: 'mild', label: t('symptoms.mild'), color: '#22C55E' },
@@ -151,20 +171,58 @@ export default function SymptomsScreen() {
 
     setIsChecking(true);
     setResult(null);
-    loadingTimer.current = setTimeout(() => {
+
+    try {
+      // Try server-side analysis first
+      const { data } = await api.post('/symptoms', {
+        symptoms: symptoms.trim(),
+        duration: duration.trim(),
+        severity,
+      });
+
+      // Server returned a persisted report
+      setResult({
+        disease: data.disease,
+        confidence: data.confidence,
+        description: `Server-analyzed symptoms for your ${duration.trim() || 'reported'} duration.`,
+        recommendation: data.recommendation,
+        precautions: [],
+        book_appointment: severity !== 'mild',
+        source: 'server',
+      });
+
+      addSymptomRecord({
+        id: data.id,
+        symptoms: symptoms.trim(),
+        duration: duration.trim(),
+        severity,
+        timestamp: data.createdAt,
+        synced: true,
+      });
+      setLatestSymptomReport({
+        id: data.id,
+        symptoms: symptoms.trim(),
+        duration: duration.trim(),
+        severity,
+        disease: data.disease,
+        recommendation: data.recommendation,
+        confidence: data.confidence,
+        createdAt: data.createdAt,
+      });
+    } catch {
+      // Fallback to local rule engine — shows "Offline fallback" badge
       const computedResult = getLocalResult(symptoms, severity, duration);
       setResult(computedResult);
 
       const reportId = Date.now().toString();
-      const newRecord = {
+      addSymptomRecord({
         id: reportId,
         symptoms: symptoms.trim(),
         duration: duration.trim(),
         severity,
         timestamp: new Date().toISOString(),
-        synced: false
-      };
-      addSymptomRecord(newRecord);
+        synced: false,
+      });
       setLatestSymptomReport({
         id: reportId,
         symptoms: symptoms.trim(),
@@ -173,19 +231,39 @@ export default function SymptomsScreen() {
         disease: computedResult.disease,
         recommendation: computedResult.recommendation,
         confidence: computedResult.confidence,
-        createdAt: new Date().toISOString()
+        createdAt: new Date().toISOString(),
       });
+    } finally {
       setIsChecking(false);
-    }, 2300);
+    }
   };
 
   useEffect(() => {
+    const fetchHistory = async () => {
+      try {
+        const { data } = await api.get('/symptoms');
+        setSymptomHistory(
+          data.map((r: any) => ({
+            id: r.id,
+            symptoms: r.symptoms,
+            duration: r.duration,
+            severity: r.severity,
+            timestamp: r.createdAt,
+            synced: true,
+          }))
+        );
+      } catch (err) {
+        // Keep whatever is in local store on error
+      }
+    };
+    fetchHistory();
+
     return () => {
       if (loadingTimer.current) {
         clearTimeout(loadingTimer.current);
       }
     };
-  }, []);
+  }, [setSymptomHistory]);
 
   const addCommonSymptom = (symptom: string) => {
     if (symptoms) {
@@ -221,69 +299,76 @@ export default function SymptomsScreen() {
       {result && (
         <View style={styles.resultCard}>
           <View style={styles.resultHeader}>
-            <CheckCircle size={24} color="#22C55E" />
+            <CheckCircle size={32} color="#22C55E" />
             <Text style={styles.resultTitle}>
-              {result.source === 'local' ? 'Basic Symptom Summary' : 'AI Diagnosis Result'}
+              {result.source === 'local' ? 'Symptom Summary' : 'Assessment Complete'}
             </Text>
           </View>
 
-          {result.source === 'local' ? (
+          {result.source === 'local' && (
             <View style={styles.localBadge}>
-              <Text style={styles.localBadgeText}>Offline fallback</Text>
-            </View>
-          ) : null}
-
-          {/* Disease */}
-          <View style={styles.resultRow}>
-            <Text style={styles.resultLabel}>Predicted Disease</Text>
-            <Text style={styles.resultDisease}>{result.disease}</Text>
-          </View>
-
-          {/* Confidence */}
-          {result.confidence && (
-            <View style={styles.resultRow}>
-              <Text style={styles.resultLabel}>Model Confidence</Text>
-              <Text style={styles.resultConfidence}>{result.confidence}%</Text>
+              <Text style={styles.localBadgeText}>Basic Offline Analysis</Text>
             </View>
           )}
 
+          {/* Disease (BIG & BOLD) */}
+          <View style={styles.diseaseContainer}>
+            <View style={styles.diseaseHeaderRow}>
+              <Text style={[styles.resultLabel, { marginBottom: 0 }]}>Possible Condition</Text>
+              <View style={[styles.severityResultBadge, { backgroundColor: (severityOptions.find(s => s.value === severity)?.color || '#22C55E') + '20' }]}>
+                <Text style={[styles.severityResultText, { color: severityOptions.find(s => s.value === severity)?.color || '#22C55E' }]}>
+                  {severityOptions.find(s => s.value === severity)?.label || severity}
+                </Text>
+              </View>
+            </View>
+            <Text style={styles.resultDisease}>{result.disease}</Text>
+          </View>
+
           {/* Description */}
-          {result.description ? (
+          {result.description && (
             <View style={styles.resultDescBox}>
-              <Text style={styles.resultLabel}>About this condition</Text>
               <Text style={styles.resultDesc}>{result.description}</Text>
             </View>
-          ) : null}
+          )}
 
-          {/* Recommendation */}
+          {/* Recommendation (High Visibility) */}
           <View style={[
             styles.recommendBox,
-            { backgroundColor: result.book_appointment ? '#FEF3C7' : '#F0FDF4' }
+            { backgroundColor: result.book_appointment ? '#FEF2F2' : '#F0FDF4', borderColor: result.book_appointment ? '#FECACA' : '#BBF7D0', borderWidth: 2 }
           ]}>
+            <View style={{flexDirection: 'row', alignItems: 'center', marginBottom: 8}}>
+              <AlertTriangle size={20} color={result.book_appointment ? '#EF4444' : '#16A34A'} />
+              <Text style={[styles.recommendTitle, { color: result.book_appointment ? '#EF4444' : '#16A34A' }]}>
+                Recommendation
+              </Text>
+            </View>
             <Text style={styles.recommendText}>{result.recommendation}</Text>
           </View>
 
           {/* Precautions */}
           {result.precautions && result.precautions.length > 0 && (
             <View style={styles.precautionsBox}>
-              <Text style={styles.resultLabel}>Precautions</Text>
+              <Text style={styles.precautionsTitle}>Things you can do:</Text>
               {result.precautions.map((p: string, i: number) => (
-                <Text key={i} style={styles.precautionItem}>• {p}</Text>
+                <View key={i} style={styles.precautionItemRow}>
+                  <View style={styles.precautionBullet} />
+                  <Text style={styles.precautionItemText}>{p}</Text>
+                </View>
               ))}
             </View>
           )}
 
           {/* Book Appointment Button */}
           {result.book_appointment && (
-            <TouchableOpacity style={styles.appointmentButton}>
-              <Calendar size={18} color="#FFFFFF" />
-              <Text style={styles.appointmentButtonText}>Book Doctor Appointment</Text>
+            <TouchableOpacity style={styles.appointmentButtonBig}>
+              <Calendar size={24} color="#FFFFFF" />
+              <Text style={styles.appointmentButtonTextBig}>Book a Doctor</Text>
             </TouchableOpacity>
           )}
 
           {/* Check Again */}
           <TouchableOpacity style={styles.resetButton} onPress={resetForm}>
-            <Text style={styles.resetButtonText}>Check Again</Text>
+            <Text style={styles.resetButtonText}>Check New Symptoms</Text>
           </TouchableOpacity>
         </View>
       )}
@@ -306,11 +391,16 @@ export default function SymptomsScreen() {
                 textAlignVertical="top"
               />
               <TouchableOpacity
-                style={styles.micButton}
-                onPress={() => Alert.alert('Voice Input', 'Voice-to-text feature coming soon!')}
+                style={[styles.micButton, isListening && { backgroundColor: '#EF4444' }]}
+                onPress={handleSimulateSpeech}
                 activeOpacity={0.7}
+                disabled={isListening}
               >
-                <Mic size={22} color="#FFFFFF" />
+                {isListening ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Mic size={22} color="#FFFFFF" />
+                )}
               </TouchableOpacity>
             </View>
             <Text style={styles.commonSymptomsTitle}>{t('symptoms.commonSymptoms')}</Text>
@@ -575,46 +665,72 @@ const styles = StyleSheet.create({
 
   // Result card styles
   resultCard: {
-    margin: 20, backgroundColor: '#FFFFFF', borderRadius: 16, padding: 20,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1, shadowRadius: 8, elevation: 4,
+    margin: 20, backgroundColor: '#FFFFFF', borderRadius: 20, padding: 24,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15, shadowRadius: 12, elevation: 8,
   },
-  resultHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
-  resultTitle: { fontSize: 18, fontWeight: 'bold', color: '#1F2937', marginLeft: 8 },
+  resultHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 20, justifyContent: 'center' },
+  resultTitle: { fontSize: 24, fontWeight: '900', color: '#1F2937', marginLeft: 10 },
   localBadge: {
-    alignSelf: 'flex-start',
+    alignSelf: 'center',
     backgroundColor: '#E0F2FE',
-    paddingHorizontal: 10,
+    paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 999,
-    marginBottom: 12,
+    marginBottom: 20,
   },
   localBadgeText: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: '700',
     color: '#0369A1',
   },
-  resultRow: {
-    flexDirection: 'row', justifyContent: 'space-between',
-    alignItems: 'center', marginBottom: 12,
+  diseaseContainer: {
+    alignItems: 'center',
+    backgroundColor: '#F3F4F6',
+    padding: 20,
+    borderRadius: 16,
+    marginBottom: 16,
   },
-  resultLabel: { fontSize: 13, color: '#6B7280', fontWeight: '600', marginBottom: 4 },
-  resultDisease: { fontSize: 18, fontWeight: 'bold', color: '#1F2937' },
-  resultConfidence: { fontSize: 16, fontWeight: 'bold', color: '#22C55E' },
-  resultDescBox: { marginBottom: 12 },
-  resultDesc: { fontSize: 14, color: '#4B5563', lineHeight: 20 },
-  recommendBox: { borderRadius: 10, padding: 14, marginBottom: 12 },
-  recommendText: { fontSize: 14, fontWeight: '600', color: '#1F2937', lineHeight: 20 },
-  precautionsBox: { marginBottom: 16 },
-  precautionItem: { fontSize: 14, color: '#4B5563', lineHeight: 22 },
-  appointmentButton: {
-    backgroundColor: '#3B82F6', flexDirection: 'row', alignItems: 'center',
-    justifyContent: 'center', padding: 14, borderRadius: 12, marginBottom: 10,
+  diseaseHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    width: '100%',
+    marginBottom: 12,
   },
-  appointmentButtonText: { color: '#FFFFFF', fontSize: 15, fontWeight: 'bold', marginLeft: 8 },
+  severityResultBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  severityResultText: {
+    fontSize: 12,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  resultLabel: { fontSize: 14, color: '#6B7280', fontWeight: '700', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 1 },
+  resultDisease: { fontSize: 28, fontWeight: '900', color: '#111827', textAlign: 'center', lineHeight: 34 },
+  resultDescBox: { marginBottom: 20, paddingHorizontal: 10 },
+  resultDesc: { fontSize: 18, color: '#374151', lineHeight: 26, textAlign: 'center' },
+  recommendBox: { borderRadius: 16, padding: 20, marginBottom: 20 },
+  recommendTitle: { fontSize: 18, fontWeight: 'bold', marginLeft: 8 },
+  recommendText: { fontSize: 18, fontWeight: '600', color: '#1F2937', lineHeight: 26 },
+  precautionsBox: { marginBottom: 24, backgroundColor: '#F9FAFB', padding: 20, borderRadius: 16 },
+  precautionsTitle: { fontSize: 18, fontWeight: '700', color: '#1F2937', marginBottom: 12 },
+  precautionItemRow: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 10 },
+  precautionBullet: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#3B82F6', marginTop: 8, marginRight: 12 },
+  precautionItemText: { fontSize: 17, color: '#4B5563', lineHeight: 24, flex: 1 },
+  appointmentButtonBig: {
+    backgroundColor: '#2563EB', flexDirection: 'row', alignItems: 'center',
+    justifyContent: 'center', padding: 18, borderRadius: 16, marginBottom: 16,
+    shadowColor: '#2563EB', shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3, shadowRadius: 8, elevation: 4,
+  },
+  appointmentButtonTextBig: { color: '#FFFFFF', fontSize: 18, fontWeight: '800', marginLeft: 10 },
   resetButton: {
-    borderWidth: 1, borderColor: '#D1D5DB', padding: 12,
-    borderRadius: 12, alignItems: 'center',
+    backgroundColor: '#F3F4F6', padding: 16,
+    borderRadius: 16, alignItems: 'center',
   },
-  resetButtonText: { fontSize: 14, color: '#6B7280', fontWeight: '600' },
+  resetButtonText: { fontSize: 16, color: '#4B5563', fontWeight: '700' },
 });

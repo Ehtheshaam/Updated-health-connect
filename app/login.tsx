@@ -1,16 +1,21 @@
 import React, { useEffect, useState } from 'react';
-import { Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { ShieldCheck, User } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
+import * as SecureStore from 'expo-secure-store';
 import { useHealthStore } from '@/store/healthStore';
+import api from '@/src/services/api';
 
 export default function LoginScreen() {
   const router = useRouter();
   const { t, i18n } = useTranslation();
   const { user, setUser, languageSelected } = useHealthStore();
-  const [username, setUsername] = useState(user?.username ?? user?.name ?? '');
-  const [password, setPassword] = useState(user?.password ?? '');
+  const [username, setUsername] = useState(user?.name ?? '');
+  const [password, setPassword] = useState('');
+  const [isRegistering, setIsRegistering] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [offlineMode, setOfflineMode] = useState(false);
 
   useEffect(() => {
     if (!languageSelected) {
@@ -18,7 +23,7 @@ export default function LoginScreen() {
     }
   }, [languageSelected, router]);
 
-  const handleLogin = () => {
+  const handleAuth = async () => {
     const trimmedUsername = username.trim();
     const trimmedPassword = password.trim();
 
@@ -27,21 +32,47 @@ export default function LoginScreen() {
       return;
     }
 
-    setUser({
-      id: user?.id ?? Date.now().toString(),
-      username: trimmedUsername,
-      password: trimmedPassword,
-      name: trimmedUsername,
-      phone: user?.phone ?? '',
-      age: user?.age ?? '',
-      gender: user?.gender ?? '',
-      address: user?.address ?? '',
-      emergencyContact: user?.emergencyContact ?? '',
-      language: i18n.language,
-      userType: user?.userType ?? 'patient'
-    });
+    setIsLoading(true);
+    setOfflineMode(false);
 
-    router.replace('/(tabs)');
+    try {
+      const endpoint = isRegistering ? '/auth/register' : '/auth/login';
+      const payload = isRegistering
+        ? { name: trimmedUsername, phone: trimmedUsername, password: trimmedPassword }
+        : { phone: trimmedUsername, password: trimmedPassword };
+
+      const { data } = await api.post(endpoint, payload);
+
+      // Store JWT in secure storage
+      await SecureStore.setItemAsync('token', data.token);
+
+      // Store user in Zustand
+      setUser({
+        id: data.user.id,
+        name: data.user.name,
+        phone: data.user.phone,
+        age: data.user.age || '',
+        gender: data.user.gender || '',
+        address: data.user.address || '',
+        emergencyContact: data.user.emergencyContact || '',
+        language: i18n.language,
+        userType: data.user.userType || 'patient',
+      });
+
+      router.replace('/(tabs)');
+    } catch (err: any) {
+      const message = err.response?.data?.error;
+
+      if (message) {
+        // Server responded with a known error (wrong password, user exists, etc.)
+        Alert.alert(t('common.error'), message);
+      } else {
+        // Network error / server unreachable — show offline banner, don't silently fake-login
+        setOfflineMode(true);
+      }
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -50,10 +81,20 @@ export default function LoginScreen() {
         <View style={styles.iconWrap}>
           <ShieldCheck size={34} color="#0F766E" />
         </View>
-        <Text style={styles.title}>Login to continue</Text>
+        <Text style={styles.title}>{isRegistering ? 'Create account' : 'Login to continue'}</Text>
         <Text style={styles.subtitle}>
-          Use the same username later for consult booking and profile display.
+          {isRegistering
+            ? 'Register with a username and password to get started.'
+            : 'Use the same username later for consult booking and profile display.'}
         </Text>
+
+        {offlineMode && (
+          <View style={styles.offlineBanner}>
+            <Text style={styles.offlineBannerText}>
+              ⚠ Cannot reach the server. Check your connection and make sure the backend is running.
+            </Text>
+          </View>
+        )}
 
         <View style={styles.field}>
           <Text style={styles.label}>Username</Text>
@@ -82,11 +123,21 @@ export default function LoginScreen() {
           />
         </View>
 
-        <TouchableOpacity style={styles.button} onPress={handleLogin} activeOpacity={0.9}>
-          <Text style={styles.buttonText}>Continue</Text>
+        <TouchableOpacity style={styles.button} onPress={handleAuth} activeOpacity={0.9} disabled={isLoading}>
+          {isLoading ? (
+            <ActivityIndicator color="#FFFFFF" size="small" />
+          ) : (
+            <Text style={styles.buttonText}>{isRegistering ? 'Register' : 'Continue'}</Text>
+          )}
         </TouchableOpacity>
 
-        <Text style={styles.note}>This is a local app login and is stored on this device only.</Text>
+        <TouchableOpacity onPress={() => { setIsRegistering(!isRegistering); setOfflineMode(false); }} style={styles.toggleWrap}>
+          <Text style={styles.toggleText}>
+            {isRegistering ? 'Already have an account? Login' : "Don't have an account? Register"}
+          </Text>
+        </TouchableOpacity>
+
+        <Text style={styles.note}>Your credentials are securely transmitted and never stored in plain text.</Text>
       </View>
     </ScrollView>
   );
@@ -129,6 +180,20 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     marginTop: 8,
     marginBottom: 22
+  },
+  offlineBanner: {
+    backgroundColor: '#FEF3C7',
+    borderLeftWidth: 4,
+    borderLeftColor: '#F59E0B',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 16,
+  },
+  offlineBannerText: {
+    fontSize: 13,
+    color: '#92400E',
+    fontWeight: '600',
+    lineHeight: 18,
   },
   field: {
     marginBottom: 16
@@ -176,6 +241,15 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '800'
+  },
+  toggleWrap: {
+    marginTop: 14,
+    alignItems: 'center',
+  },
+  toggleText: {
+    fontSize: 14,
+    color: '#0F766E',
+    fontWeight: '700',
   },
   note: {
     marginTop: 14,

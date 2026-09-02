@@ -26,60 +26,16 @@ import {
 } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import { useHealthStore } from '@/store/healthStore';
+import api from '@/src/services/api';
 
 type Provider = {
   id: number;
   hospital: string;
   doctor: string;
   specialty: string;
-  time: string;
-  distance: string;
-  fee: string;
   city: string;
+  fee: string;
 };
-
-const providers: Provider[] = [
-  {
-    id: 1,
-    hospital: 'Fortis Hospital, Mohali',
-    doctor: 'Dr. Meera Sharma',
-    specialty: 'General Medicine',
-    time: 'Today, 6:30 PM',
-    distance: 'Mohali, Punjab',
-    fee: 'Rs. 600 consult',
-    city: 'Mohali',
-  },
-  {
-    id: 2,
-    hospital: 'PGIMER, Chandigarh',
-    doctor: 'Dr. Arjun Patel',
-    specialty: 'Internal Medicine',
-    time: 'Today, 8:00 PM',
-    distance: 'Chandigarh',
-    fee: 'Rs. 500 consult',
-    city: 'Chandigarh',
-  },
-  {
-    id: 3,
-    hospital: 'Dayanand Medical College',
-    doctor: 'Dr. Nisha Verma',
-    specialty: 'Women Health',
-    time: 'Tomorrow, 10:15 AM',
-    distance: 'Ludhiana, Punjab',
-    fee: 'Rs. 700 consult',
-    city: 'Ludhiana',
-  },
-  {
-    id: 4,
-    hospital: 'Homi Bhabha Cancer Hospital',
-    doctor: 'Dr. Sandeep Gill',
-    specialty: 'Specialist Care',
-    time: 'Tomorrow, 2:30 PM',
-    distance: 'Sangrur, Punjab',
-    fee: 'Rs. 650 consult',
-    city: 'Sangrur',
-  },
-];
 
 export default function ConsultationScreen() {
   const router = useRouter();
@@ -98,16 +54,55 @@ export default function ConsultationScreen() {
   const [showTimePicker, setShowTimePicker] = useState(false);
   const [selfieConfirmed, setSelfieConfirmed] = useState(false);
   const [reportAttached, setReportAttached] = useState(true);
+  const [providers, setProviders] = useState<Provider[]>([]);
 
-  const { user, lastSymptomReport, addConsultBooking, consultBookings } = useHealthStore();
+  const { user, lastSymptomReport, consultBookings, setConsultBookings } = useHealthStore();
 
   useEffect(() => {
     if (user) {
-      setPatientName(user.name || user.username || '');
-      setUsername(user.username || user.name || '');
+      setPatientName(user.name || '');
+      setUsername(user.name || '');
       setPhone(user.phone || '');
     }
   }, [user]);
+
+  // Fetch providers from API on mount
+  useEffect(() => {
+    const fetchProviders = async () => {
+      try {
+        const { data } = await api.get('/providers');
+        setProviders(data);
+      } catch {
+        // Keep empty — could show a message but providers are non-critical to block on
+      }
+    };
+    fetchProviders();
+  }, []);
+
+  // Fetch bookings from API on mount
+  useEffect(() => {
+    const fetchBookings = async () => {
+      try {
+        const { data } = await api.get('/bookings');
+        setConsultBookings(
+          data.map((b: any) => ({
+            id: b.id,
+            hospital: b.hospital,
+            doctor: b.doctor,
+            date: b.date,
+            time: b.time,
+            status: b.status,
+            createdAt: b.createdAt,
+            patientName: user?.name || '',
+            username: user?.name || '',
+          }))
+        );
+      } catch {
+        // Keep whatever is in the store
+      }
+    };
+    fetchBookings();
+  }, [setConsultBookings, user]);
 
   const latestBooking = consultBookings[0];
 
@@ -146,7 +141,7 @@ export default function ConsultationScreen() {
     setShowBookingForm(true);
   };
 
-  const submitBooking = () => {
+  const submitBooking = async () => {
     if (!selectedProvider) return;
 
     if (!lastSymptomReport) {
@@ -183,25 +178,39 @@ export default function ConsultationScreen() {
       return;
     }
 
-    addConsultBooking({
-      id: Date.now().toString(),
-      patientName: patientName.trim(),
-      username: username.trim(),
-      hospital: selectedProvider.hospital,
-      doctor: selectedProvider.doctor,
-      date: appointmentDate.trim(),
-      time: appointmentTime.trim(),
-      symptomsReportId: lastSymptomReport.id,
-      selfieConfirmed: true,
-      status: 'Pending hospital acceptance',
-      createdAt: new Date().toISOString(),
-    });
+    try {
+      // POST to API — the server creates the booking
+      const { data: newBooking } = await api.post('/bookings', {
+        hospital: selectedProvider.hospital,
+        doctor: selectedProvider.doctor,
+        date: appointmentDate.trim(),
+        time: appointmentTime.trim(),
+      });
 
-    setShowBookingForm(false);
-    Alert.alert(
-      'Booking submitted',
-      'Your consult request is now pending. Please wait till the hospital accepts the booking.'
-    );
+      // Refresh the full bookings list from server to avoid duplicates (fix #1)
+      const { data: allBookings } = await api.get('/bookings');
+      setConsultBookings(
+        allBookings.map((b: any) => ({
+          id: b.id,
+          hospital: b.hospital,
+          doctor: b.doctor,
+          date: b.date,
+          time: b.time,
+          status: b.status,
+          createdAt: b.createdAt,
+          patientName: patientName.trim(),
+          username: username.trim(),
+        }))
+      );
+
+      setShowBookingForm(false);
+      Alert.alert(
+        'Booking submitted',
+        'Your consult request is now pending. Please wait till the hospital accepts the booking.'
+      );
+    } catch (err: any) {
+      Alert.alert('Booking failed', err.response?.data?.error || 'Could not submit booking. Please try again.');
+    }
   };
 
   const attachedReportText = lastSymptomReport
@@ -493,12 +502,8 @@ export default function ConsultationScreen() {
 
           <View style={styles.providerDetails}>
             <View style={styles.detailItem}>
-              <Clock3 size={14} color="#6B7280" />
-              <Text style={styles.detailText}>{provider.time}</Text>
-            </View>
-            <View style={styles.detailItem}>
               <MapPin size={14} color="#6B7280" />
-              <Text style={styles.detailText}>{provider.distance}</Text>
+              <Text style={styles.detailText}>{provider.city}</Text>
             </View>
           </View>
 

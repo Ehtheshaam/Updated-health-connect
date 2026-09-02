@@ -1,0 +1,85 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id               String   @id @default(cuid())
+  name             String
+  phone            String   @unique
+  passwordHash     String
+  age              String   @default("")
+  gender           String   @default("")
+  address          String   @default("")
+  emergencyContact String   @default("")
+  userType         String   @default("patient") // "patient" | "healthWorker"
+  createdAt        DateTime @default(now())
+
+  symptomReports SymptomReport[]
+  healthRecords  HealthRecord[]
+  prescriptions  Prescription[]
+  consultBookings ConsultBooking[]
+}
+
+model SymptomReport {
+  id             String   @id @default(cuid())
+  userId         String
+  symptoms       String
+  duration       String
+  severity       String   // "mild" | "moderate" | "severe"
+  disease        String
+  recommendation String
+  confidence     Float
+  createdAt      DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+}
+
+model HealthRecord {
+  id      String  @id @default(cuid())
+  userId  String
+  type    String
+  date    String
+  doctor  String
+  results String
+  fileUrl String?
+
+  user User @relation(fields: [userId], references: [id])
+}
+
+model Prescription {
+  id           String @id @default(cuid())
+  userId       String
+  doctor       String
+  date         String
+  medicines    String // JSON string — array of { name, dosage, duration }
+  instructions String
+
+  user User @relation(fields: [userId], references: [id])
+}
+
+model ConsultBooking {
+  id       String @id @default(cuid())
+  userId   String
+  hospital String
+  doctor   String
+  date     String
+  time     String
+  status   String @default("Pending hospital acceptance")
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+}
+
+model Provider {
+  id        Int    @id @default(autoincrement())
+  hospital  String
+  doctor    String
+  specialty String
+  city      String
+  fee       String
+}

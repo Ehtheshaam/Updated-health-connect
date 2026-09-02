@@ -113,15 +113,15 @@ export default function HomeScreen() {
         <View style={styles.quickActions}>
           <TouchableOpacity style={styles.actionCard} onPress={() => handleQuickAction('/symptoms')} activeOpacity={0.85}>
             <FileText size={24} color="#3B82F6" />
-            <Text style={styles.actionText}>{t('home.reportSymptoms')}</Text>
+            <Text style={styles.actionText}>{t('home.reportSymptoms').replace(' ', '\n')}</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.actionCard} onPress={() => handleQuickAction('/consultation')} activeOpacity={0.85}>
             <Video size={24} color="#8B5CF6" />
-            <Text style={styles.actionText}>{t('home.videoConsult')}</Text>
+            <Text style={styles.actionText}>{t('home.videoConsult').replace(' ', '\n')}</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.actionCard} onPress={() => handleQuickAction('/profile')} activeOpacity={0.85}>
             <Users size={24} color="#F59E0B" />
-            <Text style={styles.actionText}>{t('home.healthWorker')}</Text>
+            <Text style={styles.actionText}>{t('home.healthWorker').replace(' ', '\n')}</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -257,7 +257,9 @@ const styles = StyleSheet.create({
     padding: 16,
     borderRadius: 12,
     alignItems: 'center',
+    justifyContent: 'center',
     flex: 1,
+    minHeight: 110,
     marginHorizontal: 4,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },

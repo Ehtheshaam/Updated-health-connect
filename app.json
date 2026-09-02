@@ -20,7 +20,13 @@
       "expo-router",
       "expo-font",
       "expo-web-browser",
-      "expo-secure-store"
+      "expo-secure-store",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow HealthConnect to access your camera for trust-check selfie."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true

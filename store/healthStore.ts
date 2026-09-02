@@ -4,8 +4,6 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 interface User {
   id?: string;
-  username: string;
-  password: string;
   name: string;
   phone: string;
   age: string;
@@ -71,15 +69,15 @@ interface SymptomReport {
 
 interface ConsultBooking {
   id: string;
-  patientName: string;
-  username: string;
+  patientName?: string;
+  username?: string;
   hospital: string;
   doctor: string;
   date: string;
   time: string;
-  symptomsReportId: string;
-  selfieConfirmed: boolean;
-  status: 'Pending hospital acceptance' | 'Accepted' | 'Rejected';
+  symptomsReportId?: string;
+  selfieConfirmed?: boolean;
+  status: 'Pending hospital acceptance' | 'Accepted' | 'Rejected' | string;
   createdAt: string;
 }
 
@@ -101,10 +99,14 @@ interface HealthStore {
   setLanguageSelected: (selected: boolean) => void;
   setLatestSymptomReport: (report: SymptomReport | null) => void;
   addConsultBooking: (booking: ConsultBooking) => void;
+  setConsultBookings: (bookings: ConsultBooking[]) => void;
   logout: () => void;
+  setSymptomHistory: (history: SymptomRecord[]) => void;
   addSymptomRecord: (record: SymptomRecord) => void;
   addHealthRecord: (record: HealthRecord) => void;
+  setHealthRecords: (records: HealthRecord[]) => void;
   addPrescription: (prescription: Prescription) => void;
+  setPrescriptions: (prescriptions: Prescription[]) => void;
   markAsSynced: (id: string, type: 'symptom' | 'health' | 'prescription') => void;
   clearPendingSync: () => void;
 }
@@ -183,11 +185,14 @@ export const useHealthStore = create<HealthStore>()(
         }));
       },
 
+      setConsultBookings: (bookings) => {
+        set({ consultBookings: bookings });
+      },
+
       logout: () => {
         set({
           user: null,
           isAuthenticated: false,
-          languageSelected: false,
           lastSymptomReport: null,
           consultBookings: [],
           symptomHistory: [],
@@ -195,6 +200,10 @@ export const useHealthStore = create<HealthStore>()(
           prescriptions: [],
           pendingSyncItems: []
         });
+      },
+
+      setSymptomHistory: (history) => {
+        set({ symptomHistory: history });
       },
 
       addSymptomRecord: (record) => {
@@ -211,11 +220,19 @@ export const useHealthStore = create<HealthStore>()(
         }));
       },
 
+      setHealthRecords: (records) => {
+        set({ healthRecords: records });
+      },
+
       addPrescription: (prescription) => {
         set((state) => ({
           prescriptions: [prescription, ...state.prescriptions],
           pendingSyncItems: [...state.pendingSyncItems, `prescription-${prescription.id}`]
         }));
+      },
+
+      setPrescriptions: (prescriptions) => {
+        set({ prescriptions });
       },
 
       markAsSynced: (id, type) => {
