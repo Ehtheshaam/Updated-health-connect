@@ -39,6 +39,11 @@ app.get('/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
+// Root route so browsers don't show "Cannot GET /"
+app.get('/', (_req, res) => {
+  res.send('<h1>HealthConnect API is Live! 🚀</h1><p>The backend is running successfully.</p>');
+});
+
 // Centralized error handler (must be last)
 app.use(errorHandler);
 

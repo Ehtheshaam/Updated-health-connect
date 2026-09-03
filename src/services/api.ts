@@ -17,7 +17,7 @@ const getBaseURL = (): string => {
   if (envUrl) return envUrl;
 
   // Default fallback
-  return 'SET_YOUR_RENDER_URL_HERE';
+  return 'https://healthconnect-backend-bawa.onrender.com';
 };
 
 const api = axios.create({
