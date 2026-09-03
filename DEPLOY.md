@@ -26,8 +26,28 @@ Follow these exact steps to deploy the backend manually:
    - Paste the exact same Neon connection string into `DATABASE_URL`.
    - Set a strong string for `JWT_SECRET`.
 
-6. **Connect the Frontend:**
-   - Once the deployment is successful and Render provides a public URL (e.g., `https://healthconnect-backend.onrender.com`), copy it.
-   - Open your frontend configuration (e.g., Expo settings or directly replacing the `SET_YOUR_RENDER_URL_HERE` placeholder locally, or setting `EXPO_PUBLIC_API_URL` environment variable) and paste the Render public URL.
+6. **Security Note - Important!**
+   - Before distributing the app, change the `JWT_SECRET` in Render to a strong, random, secure string. Using a default or placeholder secret like "healthconnect-demo-secret-change-me" is a major security vulnerability for a public app.
 
-Your app is now connected to the live backend!
+## Distributing the Frontend App (Android APK)
+
+The frontend of this application is distributed as an Android APK, built using Expo Application Services (EAS). We are not deploying a static web version.
+
+1. **Prerequisites:**
+   - You must have an Expo account.
+   - Run `eas login` to authenticate the CLI.
+
+2. **Configure Backend URL:**
+   - Ensure the `EXPO_PUBLIC_API_URL` environment variable is pointing to your live Render backend URL. This is configured in the `eas.json` file under the `preview` build profile, or in a local `.env` file during the build process.
+
+3. **Build the APK:**
+   - Run the following command to build the Android APK:
+     ```bash
+     eas build --platform android --profile preview
+     ```
+   - This command will package the app and generate a downloadable `.apk` link.
+
+4. **Distribution:**
+   - Download the generated `.apk` file from the Expo dashboard.
+   - You can upload this file to GitHub Releases or distribute it directly to users.
+   - Users will need to allow "Install from Unknown Sources" on their Android devices to sideload the app.

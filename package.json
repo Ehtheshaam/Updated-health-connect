@@ -5,7 +5,6 @@
   "private": true,
   "scripts": {
     "dev": "expo start",
-    "build:web": "expo export --platform web",
     "lint": "expo lint"
   },
   "dependencies": {
@@ -53,6 +52,7 @@
   "devDependencies": {
     "@babel/core": "^7.25.2",
     "@types/react": "~19.0.10",
+    "eas-cli": "^23.2.0",
     "typescript": "~5.8.3"
   }
 }

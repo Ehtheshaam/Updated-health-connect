@@ -1,0 +1,29 @@
+{
+  "cli": {
+    "version": ">= 14.7.1",
+    "appVersionSource": "remote"
+  },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal"
+    },
+    "preview": {
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://healthconnect-backend-bawa.onrender.com"
+      }
+    },
+    "production": {
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://healthconnect-backend-bawa.onrender.com"
+      }
+    }
+  },
+  "submit": {
+    "production": {}
+  }
+}

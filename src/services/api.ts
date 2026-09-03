@@ -6,18 +6,16 @@ import { getToken, removeToken } from '@/src/utils/tokenStorage';
 
 /**
  * API base URL resolution:
- * 1. EXPO_PUBLIC_API_URL env var (set this for physical device testing, e.g. http://192.168.1.5:3001)
- * 2. Fallback to production Render URL
+ * Uses EXPO_PUBLIC_API_URL env var configured in eas.json or .env
  */
 const getBaseURL = (): string => {
-  // Check for Expo public env var (works with expo-constants)
   const envUrl = Constants.expoConfig?.extra?.EXPO_PUBLIC_API_URL
     ?? process.env.EXPO_PUBLIC_API_URL;
 
   if (envUrl) return envUrl;
 
-  // Default fallback
-  return 'https://healthconnect-backend-bawa.onrender.com';
+  console.warn("EXPO_PUBLIC_API_URL is not set. API calls will fail.");
+  return '';
 };
 
 const api = axios.create({
