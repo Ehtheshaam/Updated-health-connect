@@ -17,7 +17,7 @@ const getBaseURL = (): string => {
   if (envUrl) return envUrl;
 
   // Default fallback
-  return 'http://10.41.222.124:3001';
+  return 'SET_YOUR_RENDER_URL_HERE';
 };
 
 const api = axios.create({
