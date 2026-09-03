@@ -1,13 +1,13 @@
 import axios from 'axios';
-import * as SecureStore from 'expo-secure-store';
 import Constants from 'expo-constants';
 import { useHealthStore } from '@/store/healthStore';
 import { router } from 'expo-router';
+import { getToken, removeToken } from '@/src/utils/tokenStorage';
 
 /**
  * API base URL resolution:
  * 1. EXPO_PUBLIC_API_URL env var (set this for physical device testing, e.g. http://192.168.1.5:3001)
- * 2. Fallback to localhost:3001
+ * 2. Fallback to production Render URL
  */
 const getBaseURL = (): string => {
   // Check for Expo public env var (works with expo-constants)
@@ -32,12 +32,12 @@ const api = axios.create({
 api.interceptors.request.use(
   async (config) => {
     try {
-      const token = await SecureStore.getItemAsync('token');
+      const token = await getToken();
       if (token) {
         config.headers.Authorization = `Bearer ${token}`;
       }
     } catch {
-      // SecureStore not available (e.g. web) — skip
+      // Token storage not available — skip
     }
     return config;
   },
@@ -51,7 +51,7 @@ api.interceptors.response.use(
     if (error.response?.status === 401) {
       // Token expired or invalid — log out
       try {
-        await SecureStore.deleteItemAsync('token');
+        await removeToken();
       } catch {
         // ignore
       }

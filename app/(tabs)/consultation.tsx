@@ -3,6 +3,7 @@ import {
   Alert,
   Image,
   Modal,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -10,7 +11,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { CameraView, type CameraCapturedPicture, useCameraPermissions } from 'expo-camera';
+import { getCameraComponents } from '@/src/utils/cameraWrapper';
 import {
   BadgeCheck,
   Building2,
@@ -39,10 +40,23 @@ type Provider = {
 
 export default function ConsultationScreen() {
   const router = useRouter();
-  const cameraRef = useRef<CameraView | null>(null);
-  const [permission, requestPermission] = useCameraPermissions();
+  const cameraRef = useRef<any>(null);
+  const isWeb = Platform.OS === 'web';
+  const { CameraView, useCameraPermissions, requestCameraPermissionsAsync } = getCameraComponents();
+  
+  // Camera permission state — managed manually to avoid conditional hook call
+  const [permission, setPermission] = useState<any>(null);
+  const requestPermission = async () => {
+    if (isWeb || !requestCameraPermissionsAsync) return { granted: false };
+    // On native, use the expo-camera API directly
+    try {
+      const result = await requestCameraPermissionsAsync();
+      setPermission(result);
+      return result;
+    } catch { return { granted: false }; }
+  };
   const [cameraOpen, setCameraOpen] = useState(false);
-  const [capturedPhoto, setCapturedPhoto] = useState<CameraCapturedPicture | null>(null);
+  const [capturedPhoto, setCapturedPhoto] = useState<any>(null);
   const [selectedProvider, setSelectedProvider] = useState<Provider | null>(null);
   const [showBookingForm, setShowBookingForm] = useState(false);
   const [patientName, setPatientName] = useState('');
@@ -290,9 +304,13 @@ export default function ConsultationScreen() {
               Keep your face and Aadhar card visible together in the frame. We only guide the user here; card detection is not active yet.
             </Text>
 
-            {permission?.granted ? (
+            {isWeb ? (
+              <View style={styles.permissionCard}>
+                <Text style={styles.permissionText}>Camera is not available on web. Please use the mobile app to take a trust selfie.</Text>
+              </View>
+            ) : permission?.granted ? (
               <View style={styles.cameraFrame}>
-                <CameraView ref={cameraRef} style={styles.camera} facing="front" />
+                {CameraView && <CameraView ref={cameraRef} style={styles.camera} facing="front" />}
               </View>
             ) : (
               <View style={styles.permissionCard}>

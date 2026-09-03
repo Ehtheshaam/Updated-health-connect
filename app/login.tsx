@@ -3,7 +3,7 @@ import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TextInput, Touc
 import { useRouter } from 'expo-router';
 import { ShieldCheck, User } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
-import * as SecureStore from 'expo-secure-store';
+import { setToken } from '@/src/utils/tokenStorage';
 import { useHealthStore } from '@/store/healthStore';
 import api from '@/src/services/api';
 
@@ -44,7 +44,7 @@ export default function LoginScreen() {
       const { data } = await api.post(endpoint, payload);
 
       // Store JWT in secure storage
-      await SecureStore.setItemAsync('token', data.token);
+      await setToken(data.token);
 
       // Store user in Zustand
       setUser({
