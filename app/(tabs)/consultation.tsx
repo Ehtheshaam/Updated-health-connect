@@ -136,10 +136,14 @@ export default function ConsultationScreen() {
     if (!cameraRef.current) return;
 
     try {
-      const photo = await cameraRef.current.takePictureAsync({ quality: 0.75, skipProcessing: true });
+      // Remove skipProcessing as it can cause unreadable image URIs on some Android devices that crash the Image component
+      const photo = await cameraRef.current.takePictureAsync({ quality: 0.5 });
       if (photo) {
         setCapturedPhoto(photo);
-        setCameraOpen(false);
+        // Add a slight delay before unmounting the camera view to avoid native crashes on Android
+        setTimeout(() => {
+          setCameraOpen(false);
+        }, 150);
       }
     } catch {
       Alert.alert('Camera error', 'We could not capture the selfie. Please try again.');
